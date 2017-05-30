@@ -1,4 +1,4 @@
-function [x,flag,resnorm,iter,X,R,V,H,history] = gmres_l12inf(A,b,rtol,atol,maxiter,x0,options)
+function [x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,rtol,atol,maxiter,x0,options)
 % GMRES   Generalized Minimum Residual Method 
 %         with l1, l2, or linf norm residual minimization.
 %
@@ -65,6 +65,7 @@ if (nargout >= 5), need_X = 1; end
 if (nargout >= 6), need_R = 1; end
 if (nargout >= 7), need_V = 1; end
 if (nargout >= 8), need_H = 1; end
+if (nargout >= 9), need_LAMBDA = 1; end
 
 % Initialize counters and flags
 iter = 1;
@@ -76,6 +77,7 @@ r0 = b - A(x0);
 % Initialize the sequence of iterates and residuals
 if (need_X), X = x0; end
 if (need_R), R = r0;  end
+if (need_LAMBDA), LAMBDA = [];  end
 history = [];
 
 % Calculate initial residual norm (in all of l1, l2, linf)
@@ -137,7 +139,7 @@ while (~done)
 			% Solve an LP to find the expansion coefficients for xk - x0
 			linprogoptions = optimoptions(@linprog,'display','off');
 			c = [zeros(iter,1); ones(n,1)];
-			[yt,primalval] = linprog(c,[[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]],[r0;-r0],[],[],[],[],[],linprogoptions); 
+			[yt,primalval,~,~,lambda] = linprog(c,[[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]],[r0;-r0],[],[],[],[],[],linprogoptions); 
 			y = yt(1:iter); t = yt(iter+1:end); 
 			x = x0 + V(:,1:iter) * y;
 			% Note: The objective value primalval coincides with mynorm(r,'l1') below
@@ -154,7 +156,7 @@ while (~done)
 			% Solve an LP to find the expansion coefficients for xk - x0
 			linprogoptions = optimoptions(@linprog,'display','off');
 			c = [zeros(iter,1); 1];
-			[yt,primalval] = linprog(c,[[A(V(:,1:iter)),-ones(n,1)];[-A(V(:,1:iter)),-ones(n,1)]],[r0;-r0],[],[],[],[],[],linprogoptions); 
+			[yt,primalval,~,~,lambda] = linprog(c,[[A(V(:,1:iter)),-ones(n,1)];[-A(V(:,1:iter)),-ones(n,1)]],[r0;-r0],[],[],[],[],[],linprogoptions); 
 			y = yt(1:iter); t = yt(iter+1:end);
 			x = x0 + V(:,1:iter) * y;
 			% Note: The objective value primalval coincides with mynorm(r,'linf') below
@@ -177,6 +179,9 @@ while (~done)
 		end
 		if (need_R)
 			R = [R r];
+		end
+		if (need_LAMBDA && (strcmpi(options.norm,'l1') || strcmpi(options.norm,'linf')))
+			LAMBDA = [LAMBDA lambda.ineqlin(1:n)-lambda.ineqlin(n+1:end)];
 		end
 
 		% Check for maximum # of iterations
