@@ -1,25 +1,29 @@
 % Generate a random problem
-n = 10;
+n = 5;
 A = randn(n,n);
 b = randn(n,1);
 
 % Generate a problem showing that no strict 
 % decrease may happen until the last iterate for l1
-A = full(spdiags([ones(n,1), ones(n,1)], 0:1,n,n));
-b = zeros(n,1); b(end) = 1;
+% A = full(spdiags([ones(n,1), ones(n,1)], 0:1,n,n));
+% b = zeros(n,1); b(end) = 1;
 
 % Generate a problem showing that no strict 
 % decrease may happen until the last iterate for linf
-A = full(spdiags([ones(n,1), [1:n]'], 0:1,n,n));
-b = zeros(n,1); b(end) = 1;
+% A = full(spdiags([ones(n,1), [1:n]'], 0:1,n,n));
+% b = zeros(n,1); b(end) = 1;
 
 
-% Set options and call the method
+% Set options 
 options.norm = 'linf';
-options.norm = 'l1';
 options.norm = 'l2';
+options.norm = 'l1';
 
+% Set the LP solver (effective only if options.norm is 'l1' of 'inf)
+options.solver = 'linprog';
+options.solver = 'own';
 
+% Call the method
 [x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,[],[],[],[],options);
 
 % Produce a plot of the residual norms over iteration number

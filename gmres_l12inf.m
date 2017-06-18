@@ -9,6 +9,9 @@ function [x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,rtol,at
 %   where |.|_* is either the l1, l2, or linf norm.
 %
 % To select the norm, set options.norm to 'l1', 'l2', 'linf' respectively.
+% To select the solver, set 
+%   options.solver to 'linprog' (effective only if options.norm is 'l1' of 'inf)
+%   options.solver to 'own'     (effective only if options.norm is 'l1' of 'inf).
 %
 % The method stops as soon as as |rk|_* <= rtol |r0|_* or |rk|_* <= atol holds.
 %
@@ -74,6 +77,14 @@ done = 0;
 % Get initial residual
 r0 = b - A(x0);
 
+% Initialize 'previous' LP solution and corresponding basis
+sp = max(-2*r0,0);
+sm = max(+2*r0,0);
+t = r0 + sp;
+tspmu = [t; sp; sm];
+B = find(tspmu);
+B = B(1:2*n);
+
 % Initialize the sequence of iterates and residuals
 if (need_X), X = x0; end
 if (need_R), R = r0;  end
@@ -137,12 +148,25 @@ while (~done)
 		if (strcmpi(options.norm,'l1'))
 
 			% Solve an LP to find the expansion coefficients for xk - x0
-			linprogoptions = optimoptions(@linprog,'display','off');
-			c = [zeros(iter,1); ones(n,1)];
-			[yt,primalval,~,~,lambda] = linprog(c,[[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]],[r0;-r0],[],[],[],[],[],linprogoptions); 
-			y = yt(1:iter); t = yt(iter+1:end); 
-			x = x0 + V(:,1:iter) * y;
-			% Note: The objective value primalval coincides with mynorm(r,'l1') below
+			if (strcmpi(options.solver,'linprog'))
+
+				% Solve using linprog
+				linprogoptions = optimoptions(@linprog,'display','off');
+				c = [zeros(iter,1); ones(n,1)];
+				[yt,primalval,~,~,lambda] = linprog(c,[[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]],[r0;-r0],[],[],[],[],[],linprogoptions); 
+				y = yt(1:iter); t = yt(iter+1:end); 
+				x = x0 + V(:,1:iter) * y;
+				% Note: The objective value primalval coincides with mynorm(r,'l1') below
+
+			elseif (strcmpi(options.solver,'own'))
+
+				% Solve using our own customized LP solver
+				[tspmu,B,lpiter] = lp_solver(A(V(:,1:iter)),r0,[tspmu;0],B,options);
+
+			else
+				error('options.solver must be ''linprog'' or ''own''.\n');
+			end
+
 
 		elseif (strcmpi(options.norm,'l2'))
 
@@ -210,7 +234,7 @@ elseif (strcmpi(normstring,'l2'))
 elseif (strcmpi(normstring,'linf'))
 	val = norm(r,inf);
 else
-	error('Norm must be l1, l2, or linf.\n');
+	error('Norm must be ''l1'', ''l2'', or ''linf''.\n');
 end
 
 
