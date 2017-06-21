@@ -78,18 +78,19 @@ done = 0;
 r0 = b - A(x0);
 
 % Initialize 'previous' LP solution (with u non-existent) and corresponding basis
-if (strcmpi(options.norm,'l1'))
-	sp = max(-2*r0,0);
-	sm = max(+2*r0,0);
-	t = r0 + sp;
-	if (strcmpi(options.solver,'linprog'))
-		u = [];
-	elseif (strcmpi(options.solver,'own'))
-		tspmupm = [t; sp; sm];
-		B = find(tspmupm);
-		B = B(1:2*n);
+if (strcmpi(options.solver,'own'))
+	if (strcmpi(options.norm,'l1'))
+		sp = max(-2*r0,0);
+		sm = max(+2*r0,0);
+		t = r0 + sp;
+	elseif (strcmpi(options.norm,'linf'))
+		t = max(abs(r0));
+		sp = max(t-r0,0);
+		sm = max(t+r0,0);
 	end
-elseif (strcmpi(options.norm,'linf'))
+	tspmupm = [t; sp; sm];
+	B = find(tspmupm);
+	B = B(1:2*n);
 end
 
 
@@ -160,16 +161,11 @@ while (~done)
 			if (strcmpi(options.solver,'linprog'))
 
 				% Solve using linprog
-				linprogoptions = optimoptions(@linprog,'display','off');
-				linprogoptions = optimoptions(@linprog,'display','off','algorithm','active-set');
-				linprogoptions = optimoptions(@linprog,'display','off','algorithm','dual-simplex');
 				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
 				c = [zeros(iter,1); ones(n,1)];
-				ut0 = [u; 0; t];
 				Aineq = [[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]];
 				bineq = [r0;-r0];
 				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],[],[],[],linprogoptions); 
-				% [ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],[],[],ut0,linprogoptions); 
 				history.lpiter = [history.lpiter; output.iterations];
 				assert(exitflag == 1,'gmres_l12inf: linprog terminated with exitflag %d.',exitflag);
 
@@ -216,17 +212,11 @@ while (~done)
 			if (strcmpi(options.solver,'linprog'))
 
 				% Solve using linprog
-				linprogoptions = optimoptions(@linprog,'display','off');
-				linprogoptions = optimoptions(@linprog,'display','off','algorithm','dual-simplex');
 				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
-				linprogoptions = optimoptions(@linprog,'display','off','algorithm','active-set');
 				c = [zeros(iter,1); 1];
-				ut0 = [u; 0; t];
-				error
-				keyboard
 				Aineq = [[A(V(:,1:iter)),-ones(n,1)];[-A(V(:,1:iter)),-ones(n,1)]];
 				bineq = [r0;-r0];
-				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],[],[],ut0,linprogoptions); 
+				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],[],[],[],linprogoptions); 
 				history.lpiter = [history.lpiter; output.iterations];
 				assert(exitflag == 1,'gmres_l12inf: linprog terminated with exitflag %d.',exitflag);
 
@@ -238,7 +228,37 @@ while (~done)
 			elseif (strcmpi(options.solver,'own'))
 
 				% Solve using our own customized LP solver
-				error('gmres_l12inf: linf problem with own solver not yet implemented.');
+				tspmupm0 = zeros(1+2*n+2*iter,1);
+				tspmupm0(1:1+2*n) = tspmupm(1:1+2*n);                             % copy the t, sp, sm iterates
+				tspmupm0(1+2*n+1:1+2*n+iter-1) = tspmupm(1+2*n+1:1+2*n+iter-1);   % copy the up iterates
+				tspmupm0(1+2*n+iter+1:1+2*n+2*iter-1) = tspmupm(1+2*n+iter:end);  % copy the um iterates
+				B0 = B;
+				ix = find(B0>=1+2*n+iter);
+				B0(ix) = B0(ix) + 1;
+
+				if (iter > 1)
+					r = r0 - A(V(:,1:iter-1)) * u;
+					r = r0;
+				else
+					r = r0;
+					u = [];
+				end
+				t = max(abs(r));
+				sp = max(t-r,0);
+				sm = max(t+r,0);
+				tspmupm0 = [t; sp; sm; zeros(size(u)); 0; zeros(size(u)); 0];
+				B0 = find(tspmupm0);
+				B0 = B0(1:2*n);
+
+				[tspmupm,B,lpiter] = lp_solver(A(V(:,1:iter)),r0,tspmupm0,B0,options);
+				history.lpiter = [history.lpiter; lpiter];
+
+				% Postprocess the solution
+				up = tspmupm(1+2*n+1:1+2*n+iter);
+				um = tspmupm(1+2*n+iter+1:end);
+				u = up - um;
+				t = tspmupm(1);
+				x = x0 + V(:,1:iter) * u;
 
 			else
 				error('options.solver must be ''linprog'' or ''own''.\n');

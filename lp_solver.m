@@ -6,26 +6,33 @@ function [tspmupm,B,lpiter] = lp_solver(AV,r0,tspmupm,B,options)
 % 
 % if options.norm == 'l1':
 % 
-%   Minimize e^\top t 
+%   Minimize c^\top t 
 %   with variables (t,sp,sm,up,um) \in \R^n \times \R^n \times \R^n \times R^k \times R^k
 %   s.t.   t - sp + AV * up - AV * um = r0
 %   and  - t + sm + AV * up - AV * um = r0
 %   and  t, sp, sm, up, um \ge 0 
 %
-% tspmupm is an initial guess and it must be provided. It must be a vertex
-% associated with the basis B.
-%
 % if options.norm == 'linf':
 %
-%   NOT YET IMPLEMENTED
+%   Minimize t 
+%   with variables (t,sp,sm,up,um) \in \R^1 \times \R^n \times \R^n \times R^k \times R^k
+%   s.t.   t1 - sp + AV * up - AV * um = r0
+%   and  - t1 + sm + AV * up - AV * um = r0
+%   and  t, sp, sm, up, um \ge 0 
 % 
+% tspmupm is an initial guess and it must be provided. It must be a vertex
+% associated with the basis B.
 % The function returns a solution tspmupm (a vertex) and the corresponding
 % basis B, as well as the number of simplex steps lpiter.
 
 % Determine the problem size
 k = size(AV,2);
 n = length(r0);
-l = 3*n+2*k;
+if (strcmpi(options.norm,'l1'))
+	l = 3*n+2*k;
+elseif (strcmpi(options.norm,'linf'))
+	l = 1+2*n+2*k;
+end
 
 % Check initial guess dimension
 assert(length(tspmupm) == l,'lp_solver: initial guess has incorrect length.');
@@ -38,8 +45,13 @@ done = 0;
 tol = 1e-6;
 
 % Set some problem data
-e = [ones(n,1); zeros(2*n+2*k,1)];
-Aeq = [[speye(n), -speye(n), sparse(n,n), AV, -AV]; [-speye(n), sparse(n,n), speye(n), AV, -AV]];
+if (strcmpi(options.norm,'l1'))
+	c = [ones(n,1); zeros(2*n+2*k,1)];
+	Aeq = [[speye(n), -speye(n), sparse(n,n), AV, -AV]; [-speye(n), sparse(n,n), speye(n), AV, -AV]];
+elseif (strcmpi(options.norm,'linf'))
+	c = [1; zeros(2*n+2*k,1)];
+	Aeq = [[ones(n,1), -speye(n), sparse(n,n), AV, -AV]; [-ones(n,1), sparse(n,n), speye(n), AV, -AV]];
+end
 beq = [r0; r0];
 assert(rank(full(Aeq)) == 2*n,'lp_solver: Aeq does not have full rank.')
 
@@ -53,13 +65,13 @@ assert(all(tspmupm >= 0),'lp_solver: initial guess is not non-negative.' );
 assert(rank(full(Aeq(:,B))) == length(B),'lp_solver: initial basis matrix is rank-deficient.');
 
 % Output the initial objective
-% e' * tspmupm
+% c' * tspmupm
 
 % Enter simplex loop
 while (~done)
 
 	% Compute the reduced cost vector
-	Delta = e - Aeq' * (Aeq(:,B)' \ e(B));
+	Delta = c - Aeq' * (Aeq(:,B)' \ c(B));
 
 	% Round it to prevent errors from just slightly
 	% negative entries (which should be zero)
@@ -92,12 +104,6 @@ while (~done)
 		tspmupm(B) = tspmupm(B) - t * d(B);
 		tspmupm(k) = t;
 		tspmupm(r) = 0;
-
-		% Output the new objective
-		% fprintf('[Delta, tspmupm, d, q]\n');
-		% [Delta, tspmupm, d, q]
-		% fprintf('[lpiter, k, r, t, e'' * tspmupm]\n');
-		% [lpiter, k, r, t, e' * tspmupm]
 
 		% Update the basis 
 		B = setdiff(union(B,k),r);

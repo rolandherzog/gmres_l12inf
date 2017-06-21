@@ -16,12 +16,12 @@ b = randn(n,1);
 
 % Set options 
 options.norm = 'l2';
-options.norm = 'linf';
 options.norm = 'l1';
+options.norm = 'linf';
 
 % Set the LP solver (effective only if options.norm is 'l1' of 'inf)
-options.solver = 'own';
 options.solver = 'linprog';
+options.solver = 'own';
 
 % Call the method
 [x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,[],[],[],[],options);
@@ -45,11 +45,13 @@ xlabel('iter');
 
 % Produce a plot showing where the residual vector attains its maximum 
 figure(3); clf
-% [ix,jx] = find(abs(abs(R) - repmat(max(abs(R)),length(x),1)) < 1e-5);
-% tmp = sparse(ix,jx,1);
-% spy(tmp);
-% pause
-spy(round(LAMBDA,4));
+if (~isempty(LAMBDA))
+	spy(round(LAMBDA,4));
+else
+	[ix,jx] = find(abs(abs(R) - repmat(max(abs(R)),length(x),1)) < 1e-5);
+	tmp = sparse(ix,jx,1);
+	spy(tmp);
+end
 title('Coordinates where the residual attains its maximum');
 xlabel('iter');
 
@@ -70,3 +72,5 @@ if (~isempty(history.lpiter))
 	title('Number of inner LP iterations');
 	xlabel('iter');
 end
+grid on
+
