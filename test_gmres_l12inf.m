@@ -1,5 +1,5 @@
 % Generate a random problem
-n = 50;
+n = 20;
 A = randn(n,n);
 b = randn(n,1);
 
@@ -16,12 +16,12 @@ b = randn(n,1);
 
 % Set options 
 options.norm = 'l2';
-options.norm = 'l1';
 options.norm = 'linf';
+options.norm = 'l1';
 
 % Set the LP solver (effective only if options.norm is 'l1' of 'inf)
-options.solver = 'linprog';
 options.solver = 'own';
+options.solver = 'linprog';
 
 % Call the method
 [x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,[],[],[],[],options);

@@ -77,7 +77,8 @@ done = 0;
 % Get initial residual
 r0 = b - A(x0);
 
-% Initialize 'previous' LP solution (with u non-existent) and corresponding basis
+% Initialize 'previous' LP solution (with u non-existent), and corresponding basis
+% to be able to provide an initial guess to our own, customized LP solver
 if (strcmpi(options.solver,'own'))
 	if (strcmpi(options.norm,'l1'))
 		sp = max(-2*r0,0);
@@ -160,7 +161,7 @@ while (~done)
 			% Solve an LP to find the expansion coefficients for xk - x0
 			if (strcmpi(options.solver,'linprog'))
 
-				% Solve using linprog
+				% Solve using linprog (without an initial guess)
 				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
 				c = [zeros(iter,1); ones(n,1)];
 				Aineq = [[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]];
@@ -176,11 +177,11 @@ while (~done)
 
 			elseif (strcmpi(options.solver,'own'))
 
-				% Solve using our own customized LP solver
+				% Solve using our own customized LP solver (with initial guess)
 				tspmupm0 = zeros(3*n+2*iter,1);
 				tspmupm0(1:3*n) = tspmupm(1:3*n);                           % copy the t, sp, sm iterates
-				tspmupm0(3*n+1:3*n+iter-1) = tspmupm(3*n+1:3*n+iter-1);     % copy the up iterates
-				tspmupm0(3*n+iter+1:3*n+2*iter-1) = tspmupm(3*n+iter:end);  % copy the um iterates
+				tspmupm0(3*n+1:3*n+iter-1) = tspmupm(3*n+1:3*n+iter-1);     % copy the up iterates with 0 appended
+				tspmupm0(3*n+iter+1:3*n+2*iter-1) = tspmupm(3*n+iter:end);  % copy the um iterates with 0 appended
 				B0 = B;
 				ix = find(B0>=3*n+iter);
 				B0(ix) = B0(ix) + 1;
@@ -211,7 +212,7 @@ while (~done)
 			% Solve an LP to find the expansion coefficients for xk - x0
 			if (strcmpi(options.solver,'linprog'))
 
-				% Solve using linprog
+				% Solve using linprog (without an initial guess)
 				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
 				c = [zeros(iter,1); 1];
 				Aineq = [[A(V(:,1:iter)),-ones(n,1)];[-A(V(:,1:iter)),-ones(n,1)]];
@@ -227,29 +228,14 @@ while (~done)
 
 			elseif (strcmpi(options.solver,'own'))
 
-				% Solve using our own customized LP solver
+				% Solve using our own customized LP solver (with initial guess)
 				tspmupm0 = zeros(1+2*n+2*iter,1);
 				tspmupm0(1:1+2*n) = tspmupm(1:1+2*n);                             % copy the t, sp, sm iterates
-				tspmupm0(1+2*n+1:1+2*n+iter-1) = tspmupm(1+2*n+1:1+2*n+iter-1);   % copy the up iterates
-				tspmupm0(1+2*n+iter+1:1+2*n+2*iter-1) = tspmupm(1+2*n+iter:end);  % copy the um iterates
+				tspmupm0(1+2*n+1:1+2*n+iter-1) = tspmupm(1+2*n+1:1+2*n+iter-1);   % copy the up iterates with 0 appended
+				tspmupm0(1+2*n+iter+1:1+2*n+2*iter-1) = tspmupm(1+2*n+iter:end);  % copy the um iterates with 0 appended
 				B0 = B;
 				ix = find(B0>=1+2*n+iter);
 				B0(ix) = B0(ix) + 1;
-
-				if (iter > 1)
-					r = r0 - A(V(:,1:iter-1)) * u;
-					r = r0;
-				else
-					r = r0;
-					u = [];
-				end
-				t = max(abs(r));
-				sp = max(t-r,0);
-				sm = max(t+r,0);
-				tspmupm0 = [t; sp; sm; zeros(size(u)); 0; zeros(size(u)); 0];
-				B0 = find(tspmupm0);
-				B0 = B0(1:2*n);
-
 				[tspmupm,B,lpiter] = lp_solver(A(V(:,1:iter)),r0,tspmupm0,B0,options);
 				history.lpiter = [history.lpiter; lpiter];
 
