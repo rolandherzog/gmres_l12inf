@@ -49,7 +49,7 @@ end
 
 % Check and assign maximum # of iterations
 if (nargin < 5) || isempty(maxiter)
-	maxiter = 30;
+	maxiter = n;
 end
 
 % Check and assign initial guess
@@ -77,19 +77,28 @@ done = 0;
 % Get initial residual
 r0 = b - A(x0);
 
-% Initialize 'previous' LP solution and corresponding basis
-sp = max(-2*r0,0);
-sm = max(+2*r0,0);
-t = r0 + sp;
-tspmu = [t; sp; sm];
-B = find(tspmu);
-B = B(1:2*n);
+% Initialize 'previous' LP solution (with u non-existent) and corresponding basis
+if (strcmpi(options.norm,'l1'))
+	sp = max(-2*r0,0);
+	sm = max(+2*r0,0);
+	t = r0 + sp;
+	if (strcmpi(options.solver,'linprog'))
+		u = [];
+	elseif (strcmpi(options.solver,'own'))
+		tspmupm = [t; sp; sm];
+		B = find(tspmupm);
+		B = B(1:2*n);
+	end
+elseif (strcmpi(options.norm,'linf'))
+end
+
 
 % Initialize the sequence of iterates and residuals
 if (need_X), X = x0; end
 if (need_R), R = r0;  end
 if (need_LAMBDA), LAMBDA = [];  end
 history = [];
+history.lpiter = [];
 
 % Calculate initial residual norm (in all of l1, l2, linf)
 % gamma_l1 = mynorm(r,'l1');
@@ -152,16 +161,42 @@ while (~done)
 
 				% Solve using linprog
 				linprogoptions = optimoptions(@linprog,'display','off');
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','active-set');
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','dual-simplex');
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
 				c = [zeros(iter,1); ones(n,1)];
-				[yt,primalval,~,~,lambda] = linprog(c,[[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]],[r0;-r0],[],[],[],[],[],linprogoptions); 
-				y = yt(1:iter); t = yt(iter+1:end); 
-				x = x0 + V(:,1:iter) * y;
+				ut0 = [u; 0; t];
+				Aineq = [[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]];
+				bineq = [r0;-r0];
+				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],[],[],[],linprogoptions); 
+				% [ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],[],[],ut0,linprogoptions); 
+				history.lpiter = [history.lpiter; output.iterations];
+				assert(exitflag == 1,'gmres_l12inf: linprog terminated with exitflag %d.',exitflag);
+
+				% Postprocess the solution
+				u = ut(1:iter); t = ut(iter+1:end); 
+				x = x0 + V(:,1:iter) * u;
 				% Note: The objective value primalval coincides with mynorm(r,'l1') below
 
 			elseif (strcmpi(options.solver,'own'))
 
 				% Solve using our own customized LP solver
-				[tspmu,B,lpiter] = lp_solver(A(V(:,1:iter)),r0,[tspmu;0],B,options);
+				tspmupm0 = zeros(3*n+2*iter,1);
+				tspmupm0(1:3*n) = tspmupm(1:3*n);                           % copy the t, sp, sm iterates
+				tspmupm0(3*n+1:3*n+iter-1) = tspmupm(3*n+1:3*n+iter-1);     % copy the up iterates
+				tspmupm0(3*n+iter+1:3*n+2*iter-1) = tspmupm(3*n+iter:end);  % copy the um iterates
+				B0 = B;
+				ix = find(B0>=3*n+iter);
+				B0(ix) = B0(ix) + 1;
+				[tspmupm,B,lpiter] = lp_solver(A(V(:,1:iter)),r0,tspmupm0,B0,options);
+				history.lpiter = [history.lpiter; lpiter];
+
+				% Postprocess the solution
+				up = tspmupm(3*n+1:3*n+iter);
+				um = tspmupm(3*n+iter+1:end);
+				u = up - um;
+				t = tspmupm(1:n);
+				x = x0 + V(:,1:iter) * u;
 
 			else
 				error('options.solver must be ''linprog'' or ''own''.\n');
@@ -172,18 +207,42 @@ while (~done)
 
 			% Solve a least-squares problem to find the expansion coefficients for xk - x0
 			e = zeros(iter+1,1); e(1) = 1;
-			y = H(1:iter+1,1:iter) \ (gamma0 * e);
-			x = x0 + V(:,1:iter) * y;
+			u = H(1:iter+1,1:iter) \ (gamma0 * e);
+			x = x0 + V(:,1:iter) * u;
 
 		elseif (strcmpi(options.norm,'linf'))
 
 			% Solve an LP to find the expansion coefficients for xk - x0
-			linprogoptions = optimoptions(@linprog,'display','off');
-			c = [zeros(iter,1); 1];
-			[yt,primalval,~,~,lambda] = linprog(c,[[A(V(:,1:iter)),-ones(n,1)];[-A(V(:,1:iter)),-ones(n,1)]],[r0;-r0],[],[],[],[],[],linprogoptions); 
-			y = yt(1:iter); t = yt(iter+1:end);
-			x = x0 + V(:,1:iter) * y;
-			% Note: The objective value primalval coincides with mynorm(r,'linf') below
+			if (strcmpi(options.solver,'linprog'))
+
+				% Solve using linprog
+				linprogoptions = optimoptions(@linprog,'display','off');
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','dual-simplex');
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','active-set');
+				c = [zeros(iter,1); 1];
+				ut0 = [u; 0; t];
+				error
+				keyboard
+				Aineq = [[A(V(:,1:iter)),-ones(n,1)];[-A(V(:,1:iter)),-ones(n,1)]];
+				bineq = [r0;-r0];
+				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],[],[],ut0,linprogoptions); 
+				history.lpiter = [history.lpiter; output.iterations];
+				assert(exitflag == 1,'gmres_l12inf: linprog terminated with exitflag %d.',exitflag);
+
+				% Postprocess the solution
+				u = ut(1:iter); t = ut(iter+1:end);
+				x = x0 + V(:,1:iter) * u;
+				% Note: The objective value primalval coincides with mynorm(r,'linf') below
+
+			elseif (strcmpi(options.solver,'own'))
+
+				% Solve using our own customized LP solver
+				error('gmres_l12inf: linf problem with own solver not yet implemented.');
+
+			else
+				error('options.solver must be ''linprog'' or ''own''.\n');
+			end
 
 		end
 
@@ -204,7 +263,7 @@ while (~done)
 		if (need_R)
 			R = [R r];
 		end
-		if (need_LAMBDA && (strcmpi(options.norm,'l1') || strcmpi(options.norm,'linf')))
+		if (need_LAMBDA && (~strcmpi(options.solver,'own')) && (strcmpi(options.norm,'l1') || strcmpi(options.norm,'linf')))
 			LAMBDA = [LAMBDA lambda.ineqlin(1:n)-lambda.ineqlin(n+1:end)];
 		end
 

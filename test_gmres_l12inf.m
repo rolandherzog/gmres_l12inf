@@ -1,5 +1,5 @@
 % Generate a random problem
-n = 5;
+n = 50;
 A = randn(n,n);
 b = randn(n,1);
 
@@ -15,13 +15,13 @@ b = randn(n,1);
 
 
 % Set options 
-options.norm = 'linf';
 options.norm = 'l2';
+options.norm = 'linf';
 options.norm = 'l1';
 
 % Set the LP solver (effective only if options.norm is 'l1' of 'inf)
-options.solver = 'linprog';
 options.solver = 'own';
+options.solver = 'linprog';
 
 % Call the method
 [x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,[],[],[],[],options);
@@ -61,3 +61,12 @@ if (~isempty(LAMBDA))
 	xlabel('iter');
 end
 
+% Produce a plot showing the number of inner LP iterations, if available
+figure(5); clf; hold on
+if (~isempty(history.lpiter))
+	plot(history.lpiter,'bo');
+	plot(mean(history.lpiter)* ones(1,iter-1),'r');
+	axis([0, iter, 1, max(history.lpiter)+1]);
+	title('Number of inner LP iterations');
+	xlabel('iter');
+end
