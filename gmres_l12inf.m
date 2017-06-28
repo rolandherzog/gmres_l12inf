@@ -49,7 +49,7 @@ end
 
 % Check and assign maximum # of iterations
 if (nargin < 5) || isempty(maxiter)
-	maxiter = n;
+	maxiter = n+1;
 end
 
 % Check and assign initial guess

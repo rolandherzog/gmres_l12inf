@@ -1,30 +1,72 @@
+% Set problem dimension
+n = 100;
+
+% Output some information
+fprintf('-------------------------------------------------------------\n');
+fprintf(' Problem size is n = %d.\n',n);
+
 % Generate a random problem
-n = 20;
-A = randn(n,n);
-b = randn(n,1);
+% A = randn(n,n);
+% b = randn(n,1);
+% fprintf(' Random problem.\n');
+
+
+% Generate a (symmetric) problem with sparse rhs
+% (in the basis of eigenvectors)
+% A = spdiags(randn(n,1),0,n,n);
+% Q = randn(n,n); Q = orth(Q);
+% A = Q * A * Q';
+% b = randn(n,1);
+% b(abs(b) > 0.5) = 0;
+% fprintf(' Symmetric problem with %d-sparse rhs in eigenvector basis.\n',nnz(b));
+% b = Q * b;
+
+
+% Generate a (symmetric) problem with sparse solution
+% (in the basis of eigenvectors)
+A = spdiags(randn(n,1),0,n,n);
+Q = randn(n,n); Q = orth(Q);
+A = Q * A * Q';
+xstar = randn(n,1);
+xstar(abs(xstar) > 0.5) = 0;
+fprintf(' Symmetric problem with %d-sparse solution in eigenvector basis.\n',nnz(xstar));
+xstar = Q * xstar;
+b = A * xstar;
+
 
 % Generate a problem showing that no strict 
 % decrease may happen until the last iterate for l1
 % A = full(spdiags([ones(n,1), ones(n,1)], 0:1,n,n));
 % b = zeros(n,1); b(end) = 1;
+% fprintf(' Problem designed for l1-total stagnation.\n');
 
 % Generate a problem showing that no strict 
 % decrease may happen until the last iterate for linf
 % A = full(spdiags([ones(n,1), [1:n]'], 0:1,n,n));
 % b = zeros(n,1); b(end) = 1;
-
+% fprintf(' Problem designed for linf-total stagnation.\n');
 
 % Set options 
 options.norm = 'l2';
 options.norm = 'linf';
 options.norm = 'l1';
 
+% Output some information
+fprintf(' Residual is minimized w.r.t. %s norm.\n',options.norm);
+
 % Set the LP solver (effective only if options.norm is 'l1' of 'inf)
 options.solver = 'own';
 options.solver = 'linprog';
+if (strcmpi(options.norm,'l1') || strcmpi(options.norm,'linf'))
+	fprintf(' Using %s LP solver.\n',options.solver);
+end
 
 % Call the method
-[x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,[],[],[],[],options);
+rtol = 1e-6;
+atol = 0;
+[x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,rtol,atol,[],[],options);
+fprintf(' gmres_l12inf stopped at iteration %d with exitflag %d.\n',iter,flag);
+fprintf('-------------------------------------------------------------\n');
 
 % Produce a plot of the residual norms over iteration number
 figure(1); clf, hold on
