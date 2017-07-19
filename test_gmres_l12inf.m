@@ -24,14 +24,14 @@ fprintf(' Problem size is n = %d.\n',n);
 
 % Generate a (symmetric) problem with sparse solution
 % (in the basis of eigenvectors)
-A = spdiags(randn(n,1),0,n,n);
-Q = randn(n,n); Q = orth(Q);
-A = Q * A * Q';
-xstar = randn(n,1);
-xstar(abs(xstar) > 0.5) = 0;
-fprintf(' Symmetric problem with %d-sparse solution in eigenvector basis.\n',nnz(xstar));
-xstar = Q * xstar;
-b = A * xstar;
+% A = spdiags(randn(n,1),0,n,n);
+% Q = randn(n,n); Q = orth(Q);
+% A = Q * A * Q';
+% xstar = randn(n,1);
+% xstar(abs(xstar) > 0.5) = 0;
+% fprintf(' Symmetric problem with %d-sparse solution in eigenvector basis.\n',nnz(xstar));
+% xstar = Q * xstar;
+% b = A * xstar;
 
 
 % Generate a problem showing that no strict 
@@ -40,19 +40,40 @@ b = A * xstar;
 % b = zeros(n,1); b(end) = 1;
 % fprintf(' Problem designed for l1-total stagnation.\n');
 
+
 % Generate a problem showing that no strict 
 % decrease may happen until the last iterate for linf
+% TODO: This example seems broken
 % A = full(spdiags([ones(n,1), [1:n]'], 0:1,n,n));
 % b = zeros(n,1); b(end) = 1;
 % fprintf(' Problem designed for linf-total stagnation.\n');
+
+
+% Generate a problem with a non-symmetric, nearly orthogonal
+% matrix
+U = randn(n,n); U = orth(U);
+V = randn(n,n); V = orth(V);
+S = 1 + 0.01 * randn(n,n);
+A = U * S * V';
+b = randn(n,1);
+fprintf(' Non-symmetric problem with singular values close to 1.\n');
 
 % Set options 
 options.norm = 'l2';
 options.norm = 'linf';
 options.norm = 'l1';
+options.preserve_zero_residual_components = 1;  % only meaningful when options.norm == 'l1'
+options.zero_residual_threshold = 1e-7;         % only meaningful when options.norm == 'l1' and options.preserve_zero_residual_components == 1
 
 % Output some information
 fprintf(' Residual is minimized w.r.t. %s norm.\n',options.norm);
+if (strcmpi(options.norm,'l1'))
+	if (options.preserve_zero_residual_components)
+		fprintf(' Zero residual components WILL be preserved.\n');
+	else
+		fprintf(' Zero residual components will NOT be preserved.\n');
+	end
+end
 
 % Set the LP solver (effective only if options.norm is 'l1' of 'inf)
 options.solver = 'own';
@@ -62,7 +83,7 @@ if (strcmpi(options.norm,'l1') || strcmpi(options.norm,'linf'))
 end
 
 % Call the method
-rtol = 1e-6;
+rtol = 1e-12;
 atol = 0;
 [x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,rtol,atol,[],[],options);
 fprintf(' gmres_l12inf stopped at iteration %d with exitflag %d.\n',iter,flag);
@@ -74,14 +95,14 @@ plot(history.gamma_l1,'bo-','LineWidth',2);
 plot(history.gamma_l2,'r*-','LineWidth',2);
 plot(history.gamma_linf,'ks-','LineWidth',2);
 set(gca,'YScale','log');
-legend('|r|_1','|r|_2','|r|_inf');
+legend('|r|_1','|r|_2','|r|_inf','Location','southwest');
 title(sprintf('Various residual norms, going after %s',options.norm));
 xlabel('iter');
 grid on
 
 % Produce a plot showing the sparsity pattern of the residual vector
 figure(2); clf
-spy(round(R,3));
+spy(round(R,round(-log10(options.zero_residual_threshold))));
 title('Residual sparsity pattern over iterations');
 xlabel('iter');
 

@@ -18,15 +18,17 @@ function [x,flag,resnorm,iter,X,R,V,H,LAMBDA,history] = gmres_l12inf(A,b,rtol,at
 % No preconditioning is currently applied.
 % 
 % The output components are:
-% x       - approximate solution at final iterate
-% flag    - 0 (converged), -1 (negative entries in H), 1 (max # of iterations reached)
-% resnorm - |r|_* at final iterate
-% iter    - # of iterations performed
-% X       - full iterate history matrix
-% R       - full residual history matrix
-% V       - full Krylov basis vector matrix
-% H       - Hessenberg matrix generated in Arnoldi process
-% history - a history of certain iteration dependent scalars
+% x       :  approximate solution at final iterate
+% flag    :  0 (converged), 
+%         : -1 (negative entries in H), 
+%         :  1 (max # of iterations reached)
+% resnorm :  |r|_* at final iterate
+% iter    :  # of iterations performed
+% X       :  full iterate history matrix
+% R       :  full residual history matrix
+% V       :  full Krylov basis vector matrix
+% H       :  Hessenberg matrix generated in Arnoldi process
+% history :  a history of certain iteration dependent scalars
 
 % Determine whether the matrix A is a matrix or function
 % and wrap it into a function if necessary
@@ -114,6 +116,19 @@ history.gamma_linf = mynorm(r0,'linf');
 gamma = mynorm(r0,options.norm);   
 gamma0 = gamma;
 
+% In case of the l1 residual norm, set upper and lower bounds
+% which will be used to preserve residual components which were once
+% zero (if desired)
+if (strcmpi(options.norm,'l1'))
+	lb = []; ub = [];
+	if (options.preserve_zero_residual_components)
+		lb = -inf(iter+n,1);
+		ub = +inf(iter+n,1);
+		lb(round([inf(iter,1); r0],round(-log10(options.zero_residual_threshold))) == 0) = 0;
+		ub(round([inf(iter,1); r0],round(-log10(options.zero_residual_threshold))) == 0) = 0;
+	end
+end
+
 % Set initial Krylov space basis vector
 % Note: Krylov vectors will be 2-orthonormal
 V(:,1) = r0 / history.gamma_l2(end);
@@ -162,13 +177,13 @@ while (~done)
 			if (strcmpi(options.solver,'linprog'))
 
 				% Solve using linprog (without an initial guess)
-				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point','MaxIterations',1000);
 				c = [zeros(iter,1); ones(n,1)];
 				Aineq = [[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]];
 				bineq = [r0;-r0];
-				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],[],[],[],linprogoptions); 
+				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],lb,ub,[],linprogoptions); 
 				history.lpiter = [history.lpiter; output.iterations];
-				assert(exitflag == 1,'gmres_l12inf: linprog terminated with exitflag %d.',exitflag);
+				assert(exitflag == 1,'gmres_l12inf: linprog terminated with exitflag %d in outer iteration %d.',exitflag,iter);
 
 				% Postprocess the solution
 				u = ut(1:iter); t = ut(iter+1:end); 
@@ -176,6 +191,8 @@ while (~done)
 				% Note: The objective value primalval coincides with mynorm(r,'l1') below
 
 			elseif (strcmpi(options.solver,'own'))
+
+				assert(options.preserve_zero_residual_components == 0,'gmres_l12inf: preservation of zero residual components not implemented with own LP solver.');
 
 				% Solve using our own customized LP solver (with initial guess)
 				tspmupm0 = zeros(3*n+2*iter,1);
@@ -213,13 +230,13 @@ while (~done)
 			if (strcmpi(options.solver,'linprog'))
 
 				% Solve using linprog (without an initial guess)
-				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point','MaxIterations',1000);
 				c = [zeros(iter,1); 1];
 				Aineq = [[A(V(:,1:iter)),-ones(n,1)];[-A(V(:,1:iter)),-ones(n,1)]];
 				bineq = [r0;-r0];
 				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],[],[],[],linprogoptions); 
 				history.lpiter = [history.lpiter; output.iterations];
-				assert(exitflag == 1,'gmres_l12inf: linprog terminated with exitflag %d.',exitflag);
+				assert(exitflag == 1,'gmres_l12inf: linprog terminated with exitflag %d in outer iteration %d.',exitflag,iter);
 
 				% Postprocess the solution
 				u = ut(1:iter); t = ut(iter+1:end);
@@ -258,6 +275,15 @@ while (~done)
 		history.gamma_l1 = [history.gamma_l1; mynorm(r,'l1')];
 		history.gamma_l2 = [history.gamma_l2; mynorm(r,'l2')];
 		history.gamma_linf = [history.gamma_linf; mynorm(r,'linf')];
+
+		% Update the bounds to preserve zero residual components
+		% in case of the l1 minimization (if desired)
+		if (strcmpi(options.norm,'l1') && (options.preserve_zero_residual_components))
+			lb = -inf(iter+1+n,1);
+			ub = +inf(iter+1+n,1);
+			lb(round([inf(iter+1,1); r],round(-log10(options.zero_residual_threshold))) == 0) = 0;
+			ub(round([inf(iter+1,1); r],round(-log10(options.zero_residual_threshold))) == 0) = 0;
+		end
 
 		% Store also the *-norm of the current residual
 		gamma = mynorm(r,options.norm);   
