@@ -120,12 +120,12 @@ gamma0 = gamma;
 % which will be used to preserve residual components which were once
 % zero (if desired)
 if (strcmpi(options.norm,'l1'))
-	lb = []; ub = [];
+	Aeq = []; beq = [];
 	if (options.preserve_zero_residual_components)
-		lb = -inf(iter+n,1);
-		ub = +inf(iter+n,1);
-		lb(round([inf(iter,1); r0],round(-log10(options.zero_residual_threshold))) == 0) = 0;
-		ub(round([inf(iter,1); r0],round(-log10(options.zero_residual_threshold))) == 0) = 0;
+		jx = iter + find(abs(r0) < options.zero_residual_threshold);
+		ix = [1:length(jx)]';
+		Aeq = sparse(ix,jx,1,length(jx),iter+n);
+		beq = zeros(length(jx),1);
 	end
 end
 
@@ -177,11 +177,11 @@ while (~done)
 			if (strcmpi(options.solver,'linprog'))
 
 				% Solve using linprog (without an initial guess)
-				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point','MaxIterations',1000);
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
 				c = [zeros(iter,1); ones(n,1)];
 				Aineq = [[A(V(:,1:iter)),-eye(n)];[-A(V(:,1:iter)),-eye(n)]];
 				bineq = [r0;-r0];
-				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,[],[],lb,ub,[],linprogoptions); 
+				[ut,primalval,exitflag,output,lambda] = linprog(c,Aineq,bineq,Aeq,beq,[],[],[],linprogoptions); 
 				history.lpiter = [history.lpiter; output.iterations];
 				assert(exitflag == 1,'gmres_l12inf: linprog terminated with exitflag %d in outer iteration %d.',exitflag,iter);
 
@@ -230,7 +230,7 @@ while (~done)
 			if (strcmpi(options.solver,'linprog'))
 
 				% Solve using linprog (without an initial guess)
-				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point','MaxIterations',1000);
+				linprogoptions = optimoptions(@linprog,'display','off','algorithm','interior-point');
 				c = [zeros(iter,1); 1];
 				Aineq = [[A(V(:,1:iter)),-ones(n,1)];[-A(V(:,1:iter)),-ones(n,1)]];
 				bineq = [r0;-r0];
@@ -279,10 +279,13 @@ while (~done)
 		% Update the bounds to preserve zero residual components
 		% in case of the l1 minimization (if desired)
 		if (strcmpi(options.norm,'l1') && (options.preserve_zero_residual_components))
-			lb = -inf(iter+1+n,1);
-			ub = +inf(iter+1+n,1);
-			lb(round([inf(iter+1,1); r],round(-log10(options.zero_residual_threshold))) == 0) = 0;
-			ub(round([inf(iter+1,1); r],round(-log10(options.zero_residual_threshold))) == 0) = 0;
+			if (options.preserve_zero_residual_components)
+				% jx = iter + 1 + find(abs(r) < options.zero_residual_threshold);
+				jx = iter + 1 + find(abs(t) < options.zero_residual_threshold);
+				ix = [1:length(jx)]';
+				Aeq = sparse(ix,jx,1,length(jx),iter+1+n);
+				beq = zeros(length(jx),1);
+			end
 		end
 
 		% Store also the *-norm of the current residual

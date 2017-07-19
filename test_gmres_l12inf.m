@@ -63,7 +63,7 @@ options.norm = 'l2';
 options.norm = 'linf';
 options.norm = 'l1';
 options.preserve_zero_residual_components = 1;  % only meaningful when options.norm == 'l1'
-options.zero_residual_threshold = 1e-7;         % only meaningful when options.norm == 'l1' and options.preserve_zero_residual_components == 1
+options.zero_residual_threshold = 1e-6;         % only meaningful when options.norm == 'l1' and options.preserve_zero_residual_components == 1
 
 % Output some information
 fprintf(' Residual is minimized w.r.t. %s norm.\n',options.norm);
