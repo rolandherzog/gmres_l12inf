@@ -53,9 +53,9 @@ elseif (problem.type == 5)
 
 	% Generate a problem showing that no strict 
 	% decrease may happen until the last iterate for linf
-	% TODO: This example seems broken
-	A = full(spdiags([ones(n,1), [1:n]'], 0:1,n,n));
-	b = zeros(n,1); b(end) = 1;
+	% A = full(spdiags([ones(n,1), [1:n]'], 0:1,n,n));
+	A = full(spdiags([ones(n,1), ones(n,1)], 0:1,n,n));
+	b = (-1).^[1:n]';
 	fprintf(' Problem designed for linf-total stagnation.\n');
 
 elseif (problem.type == 6)
