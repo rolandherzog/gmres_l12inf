@@ -51,7 +51,7 @@ end
 
 % Check and assign maximum # of iterations
 if (nargin < 5) || isempty(maxiter)
-	maxiter = n+1;
+	maxiter = n;
 end
 
 % Check and assign initial guess
@@ -78,6 +78,10 @@ done = 0;
 
 % Get initial residual
 r0 = b - A(x0);
+
+% Assign some output arguments (in case we terminate with the initial guess)
+x = x0;
+H = [];
 
 % Initialize 'previous' LP solution (with u non-existent), and corresponding basis
 % to be able to provide an initial guess to our own, customized LP solver
@@ -116,7 +120,7 @@ history.gamma_linf = mynorm(r0,'linf');
 gamma = mynorm(r0,options.norm);   
 gamma0 = gamma;
 
-% In case of the l1 residual norm, set upper and lower bounds
+% In case of the l1 residual norm, initialize equality constraints
 % which will be used to preserve residual components which were once
 % zero (if desired)
 if (strcmpi(options.norm,'l1'))
@@ -276,7 +280,7 @@ while (~done)
 		history.gamma_l2 = [history.gamma_l2; mynorm(r,'l2')];
 		history.gamma_linf = [history.gamma_linf; mynorm(r,'linf')];
 
-		% Update the bounds to preserve zero residual components
+		% Update the equality constraints to preserve zero residual components
 		% in case of the l1 minimization (if desired)
 		if (strcmpi(options.norm,'l1') && (options.preserve_zero_residual_components))
 			if (options.preserve_zero_residual_components)
