@@ -140,9 +140,7 @@ end
 figure(1); clf, hold on
 
 % Loop over all possible norms
-% for norm_string = { 'l1', 'l2', 'linf' }
-% for norm_string = { 'linf', 'l2', 'l1' }
-for norm_string = { 'linf' }
+for norm_string = { 'l1', 'l2', 'linf' }
 
 	% Set options
 	options.norm = norm_string{1};
